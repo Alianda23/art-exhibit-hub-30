@@ -1,5 +1,7 @@
 from database import get_db_connection, dict_from_row, json_dumps
 from auth import verify_token
+from middleware import token_required, admin_required, artist_required
+from flask import request, jsonify
 import json
 import os
 import base64
@@ -464,3 +466,53 @@ def delete_artwork(auth_header, artwork_id):
         if connection.is_connected():
             cursor.close()
             connection.close()
+
+def setup_artwork_routes(app):
+    """Setup all artwork-related routes"""
+    
+    @app.route('/artworks', methods=['GET'])
+    def get_artworks_route():
+        """Get all artworks"""
+        result = get_all_artworks()
+        return jsonify(result)
+    
+    @app.route('/artworks/<int:artwork_id>', methods=['GET'])
+    def get_artwork_route(artwork_id):
+        """Get a specific artwork by ID"""
+        result = get_artwork(artwork_id)
+        return jsonify(result)
+    
+    @app.route('/artworks', methods=['POST'])
+    @admin_required
+    def create_artwork_route():
+        """Create a new artwork (admin only)"""
+        auth_header = request.headers.get('Authorization')
+        artwork_data = request.get_json()
+        result = create_artwork(auth_header, artwork_data)
+        return jsonify(result)
+    
+    @app.route('/artist/artworks', methods=['POST'])
+    @artist_required
+    def create_artist_artwork_route():
+        """Create a new artwork (artist only)"""
+        auth_header = request.headers.get('Authorization')
+        artwork_data = request.get_json()
+        result = create_artwork(auth_header, artwork_data)
+        return jsonify(result)
+    
+    @app.route('/artworks/<int:artwork_id>', methods=['PUT'])
+    @token_required
+    def update_artwork_route(artwork_id):
+        """Update an existing artwork"""
+        auth_header = request.headers.get('Authorization')
+        artwork_data = request.get_json()
+        result = update_artwork(auth_header, artwork_id, artwork_data)
+        return jsonify(result)
+    
+    @app.route('/artworks/<int:artwork_id>', methods=['DELETE'])
+    @token_required
+    def delete_artwork_route(artwork_id):
+        """Delete an artwork"""
+        auth_header = request.headers.get('Authorization')
+        result = delete_artwork(auth_header, artwork_id)
+        return jsonify(result)
