@@ -6,7 +6,6 @@ from functools import wraps
 from http.server import BaseHTTPRequestHandler
 from decimal import Decimal
 import json
-from flask import request, jsonify
 
 # Get the secret key from environment or use a default (in production, always use environment variables)
 SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'afriart_default_secret_key')
@@ -74,72 +73,6 @@ def extract_auth_token(handler):
     
     return token
 
-def token_required(f):
-    """Decorator to require authentication for Flask routes"""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = None
-        auth_header = request.headers.get('Authorization')
-        
-        if auth_header:
-            try:
-                token = auth_header.split(' ')[1]  # Bearer <token>
-            except IndexError:
-                return jsonify({'error': 'Invalid token format'}), 401
-        
-        if not token:
-            return jsonify({'error': 'Token is missing'}), 401
-        
-        try:
-            payload = verify_token(token)
-            if isinstance(payload, dict) and "error" in payload:
-                return jsonify({'error': payload['error']}), 401
-            
-            # Make current user info available
-            request.current_user = payload
-            
-        except Exception as e:
-            return jsonify({'error': 'Token is invalid'}), 401
-        
-        return f(*args, **kwargs)
-    
-    return decorated
-
-def artist_required(f):
-    """Decorator to require artist authentication for Flask routes"""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = None
-        auth_header = request.headers.get('Authorization')
-        
-        if auth_header:
-            try:
-                token = auth_header.split(' ')[1]  # Bearer <token>
-            except IndexError:
-                return jsonify({'error': 'Invalid token format'}), 401
-        
-        if not token:
-            return jsonify({'error': 'Token is missing'}), 401
-        
-        try:
-            payload = verify_token(token)
-            if isinstance(payload, dict) and "error" in payload:
-                return jsonify({'error': payload['error']}), 401
-            
-            # Check if user is an artist
-            if not payload.get("is_artist", False):
-                return jsonify({'error': 'Artist privileges required'}), 403
-            
-            # Make current user info available
-            request.current_user = payload
-            
-        except Exception as e:
-            return jsonify({'error': 'Token is invalid'}), 401
-        
-        return f(*args, **kwargs)
-    
-    return decorated
-
 def auth_required(handler_method):
     """Decorator to ensure a valid token is present for protected routes"""
     @wraps(handler_method)
@@ -163,40 +96,34 @@ def auth_required(handler_method):
     
     return wrapper
 
-def admin_required(f):
-    """Decorator to require admin authentication for Flask routes"""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = None
-        auth_header = request.headers.get('Authorization')
-        
-        if auth_header:
-            try:
-                token = auth_header.split(' ')[1]  # Bearer <token>
-            except IndexError:
-                return jsonify({'error': 'Invalid token format'}), 401
+def admin_required(handler_method):
+    """Decorator to ensure the user is an admin for admin-only routes"""
+    @wraps(handler_method)
+    def wrapper(self, *args, **kwargs):
+        token = extract_auth_token(self)
         
         if not token:
-            return jsonify({'error': 'Token is missing'}), 401
+            self._set_response(401)
+            self.wfile.write(b'{"error": "Authentication required"}')
+            return None
         
-        try:
-            payload = verify_token(token)
-            if isinstance(payload, dict) and "error" in payload:
-                return jsonify({'error': payload['error']}), 401
-            
-            # Check if user is admin
-            if not payload.get("is_admin", False):
-                return jsonify({'error': 'Admin privileges required'}), 403
-            
-            # Make current user info available
-            request.current_user = payload
-            
-        except Exception as e:
-            return jsonify({'error': 'Token is invalid'}), 401
+        payload = verify_token(token)
+        if isinstance(payload, dict) and "error" in payload:
+            self._set_response(401)
+            self.wfile.write(f'{{"error": "{payload["error"]}"}}'.encode())
+            return None
         
-        return f(*args, **kwargs)
+        # Check if user is admin
+        if not payload.get("is_admin", False):
+            self._set_response(403)
+            self.wfile.write(b'{"error": "Unauthorized access: Admin privileges required"}')
+            return None
+        
+        # Attach user info to the handler
+        self.user_info = payload
+        return handler_method(self, *args, **kwargs)
     
-    return decorated
+    return wrapper
 
 # Helper function to safely encode JSON with Decimal values
 def json_dumps(data):

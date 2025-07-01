@@ -8,11 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import TwoFactorVerification from '@/components/TwoFactorVerification';
 
 const ArtistLogin = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showTwoFactor, setShowTwoFactor] = useState(false);
+  const [pendingCredentials, setPendingCredentials] = useState<{email: string, password: string} | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -22,6 +25,32 @@ const ArtistLogin = () => {
       navigate('/artist');
     }
   }, [navigate]);
+
+  const sendTwoFactorCode = async (userEmail: string, userType: 'user' | 'artist' = 'artist') => {
+    try {
+      const response = await fetch('http://localhost:8000/send-2fa-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: userEmail,
+          userType
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send verification code');
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error sending 2FA code:', error);
+      throw error;
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +67,55 @@ const ArtistLogin = () => {
     setLoading(true);
     
     try {
-      const response = await loginArtist({ email, password });
+      // First, validate credentials without logging in
+      const response = await fetch('http://localhost:8000/validate-credentials', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          userType: 'artist'
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.valid) {
+        // Credentials are valid, send 2FA code
+        await sendTwoFactorCode(email, 'artist');
+        setPendingCredentials({ email, password });
+        setShowTwoFactor(true);
+        
+        toast({
+          title: "Verification Code Sent",
+          description: "Please check your email for the verification code.",
+        });
+      } else {
+        toast({
+          title: "Login Failed",
+          description: data.error || "Invalid email or password",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An error occurred. Please try again.",
+        variant: "destructive"
+      });
+      console.error("Login error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTwoFactorSuccess = async () => {
+    if (!pendingCredentials) return;
+    
+    try {
+      const response = await loginArtist(pendingCredentials);
       
       if (response.error) {
         toast({
@@ -56,14 +133,29 @@ const ArtistLogin = () => {
     } catch (error) {
       toast({
         title: "Error",
-        description: "An error occurred. Please try again.",
+        description: "Login failed after verification. Please try again.",
         variant: "destructive"
       });
-      console.error("Login error:", error);
-    } finally {
-      setLoading(false);
+      setShowTwoFactor(false);
+      setPendingCredentials(null);
     }
   };
+
+  const handleResendCode = async () => {
+    if (!pendingCredentials) return;
+    await sendTwoFactorCode(pendingCredentials.email, 'artist');
+  };
+
+  if (showTwoFactor && pendingCredentials) {
+    return (
+      <TwoFactorVerification
+        email={pendingCredentials.email}
+        userType="artist"
+        onVerificationSuccess={handleTwoFactorSuccess}
+        onResendCode={handleResendCode}
+      />
+    );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -107,7 +199,7 @@ const ArtistLogin = () => {
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Logging in...
+                  Validating...
                 </>
               ) : (
                 "Login"

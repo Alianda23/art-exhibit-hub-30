@@ -7,10 +7,121 @@ import datetime
 import os
 from decimal import Decimal
 from middleware import SECRET_KEY  # Import the shared SECRET_KEY
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import random
+import time
+
+# Store 2FA codes temporarily (in production, use Redis or database)
+two_fa_codes = {}
 
 def hash_password(password):
     """Hash a password using SHA-256"""
     return hashlib.sha256(password.encode()).hexdigest()
+
+def generate_2fa_code():
+    """Generate a random 4-digit code"""
+    return str(random.randint(1000, 9999))
+
+def send_email_2fa_code(email, code):
+    """Send 2FA code via email"""
+    try:
+        # Email configuration (you'll need to set these environment variables)
+        smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+        smtp_port = int(os.getenv('SMTP_PORT', '587'))
+        sender_email = os.getenv('SENDER_EMAIL')
+        sender_password = os.getenv('SENDER_PASSWORD')
+        
+        if not sender_email or not sender_password:
+            print("Email credentials not configured")
+            return {"error": "Email service not configured"}
+        
+        # Create message
+        message = MIMEMultipart()
+        message["From"] = sender_email
+        message["To"] = email
+        message["Subject"] = "Your Verification Code"
+        
+        # Email body
+        body = f"""
+        <html>
+          <body>
+            <h2>Your Verification Code</h2>
+            <p>Your 4-digit verification code is: <strong>{code}</strong></p>
+            <p>This code will expire in 10 minutes.</p>
+            <p>If you didn't request this code, please ignore this email.</p>
+          </body>
+        </html>
+        """
+        
+        message.attach(MIMEText(body, "html"))
+        
+        # Send email
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            text = message.as_string()
+            server.sendmail(sender_email, email, text)
+        
+        print(f"2FA code sent to {email}")
+        return {"success": True}
+    
+    except Exception as e:
+        print(f"Error sending email: {e}")
+        return {"error": f"Failed to send email: {str(e)}"}
+
+def send_2fa_code(email, user_type):
+    """Generate and send 2FA code"""
+    try:
+        code = generate_2fa_code()
+        
+        # Store code with expiration (10 minutes)
+        key = f"{email}_{user_type}"
+        two_fa_codes[key] = {
+            "code": code,
+            "timestamp": time.time(),
+            "expires_at": time.time() + 600  # 10 minutes
+        }
+        
+        # Send email
+        result = send_email_2fa_code(email, code)
+        
+        if result.get("error"):
+            return result
+        
+        return {"success": True, "message": "2FA code sent successfully"}
+    
+    except Exception as e:
+        print(f"Error in send_2fa_code: {e}")
+        return {"error": str(e)}
+
+def verify_2fa_code(email, code, user_type):
+    """Verify 2FA code"""
+    try:
+        key = f"{email}_{user_type}"
+        stored_data = two_fa_codes.get(key)
+        
+        if not stored_data:
+            return {"verified": False, "error": "No verification code found"}
+        
+        # Check if code has expired
+        if time.time() > stored_data["expires_at"]:
+            # Remove expired code
+            del two_fa_codes[key]
+            return {"verified": False, "error": "Verification code has expired"}
+        
+        # Check if code matches
+        if stored_data["code"] == code:
+            # Remove used code
+            del two_fa_codes[key]
+            return {"verified": True}
+        else:
+            return {"verified": False, "error": "Invalid verification code"}
+    
+    except Exception as e:
+        print(f"Error in verify_2fa_code: {e}")
+        return {"verified": False, "error": str(e)}
 
 def validate_user_credentials(email, password, user_type):
     """Validate user credentials without logging in"""
