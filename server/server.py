@@ -1,8 +1,9 @@
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from auth import (
     register_user, register_artist, login_user, login_artist, login_admin,
-    send_2fa_code, verify_2fa_code, validate_user_credentials
+    validate_user_credentials
 )
 from middleware import token_required, admin_required, artist_required
 from artwork import setup_artwork_routes
@@ -52,45 +53,6 @@ def admin_login():
     data = request.get_json()
     result = login_admin(data['email'], data['password'])
     return jsonify(result)
-
-@app.route('/send-2fa-code', methods=['POST'])
-def send_2fa_code_route():
-    try:
-        data = request.get_json()
-        print(f"Received 2FA code request: {data}")
-        
-        email = data.get('email')
-        user_type = data.get('userType', 'user')
-        
-        if not email:
-            return jsonify({'error': 'Email is required'}), 400
-        
-        result = send_2fa_code(email, user_type)
-        return jsonify(result)
-    
-    except Exception as e:
-        print(f"Error in send_2fa_code_route: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/verify-2fa', methods=['POST'])
-def verify_2fa_code_route():
-    try:
-        data = request.get_json()
-        print(f"Received 2FA verification request: {data}")
-        
-        email = data.get('email')
-        code = data.get('code')
-        user_type = data.get('userType', 'user')
-        
-        if not email or not code:
-            return jsonify({'verified': False, 'error': 'Email and code are required'}), 400
-        
-        result = verify_2fa_code(email, code, user_type)
-        return jsonify(result)
-    
-    except Exception as e:
-        print(f"Error in verify_2fa_code_route: {e}")
-        return jsonify({'verified': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8000)
