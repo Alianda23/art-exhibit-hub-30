@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Sparkles, User } from 'lucide-react';
+import { ArrowRight, Sparkles, User, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ArtworkCard from '@/components/ArtworkCard';
 import { getAllArtworks } from '@/services/api';
@@ -14,6 +14,7 @@ const ArtworkRecommendations = () => {
   const [recommendedArtworks, setRecommendedArtworks] = useState<Artwork[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPersonalized, setIsPersonalized] = useState(false);
+  const [userHasNoPurchases, setUserHasNoPurchases] = useState(false);
   const { toast } = useToast();
   const { currentUser, isAuthenticated } = useAuth();
 
@@ -26,6 +27,7 @@ const ArtworkRecommendations = () => {
         
         let recommendations: Artwork[] = [];
         let personalized = false;
+        let noPurchases = false;
         
         // Generate personalized recommendations if user is authenticated
         if (isAuthenticated && currentUser?.id) {
@@ -35,10 +37,18 @@ const ArtworkRecommendations = () => {
             allArtworks, 
             3
           );
-          personalized = true;
-        } else {
-          // Fallback to general recommendations
-          console.log("Generating general recommendations");
+          
+          if (recommendations.length === 0) {
+            console.log("No personalized recommendations - user has no purchase history");
+            noPurchases = true;
+          } else {
+            personalized = true;
+          }
+        }
+        
+        // Fallback to general recommendations only for non-authenticated users
+        if (!isAuthenticated && recommendations.length === 0) {
+          console.log("Generating general recommendations for non-authenticated user");
           recommendations = RecommendationEngine.generateSimilarArtworkRecommendations(
             allArtworks[0] || {} as Artwork, 
             allArtworks, 
@@ -48,6 +58,7 @@ const ArtworkRecommendations = () => {
         
         setRecommendedArtworks(recommendations);
         setIsPersonalized(personalized);
+        setUserHasNoPurchases(noPurchases);
       } catch (error) {
         console.error('Failed to fetch artwork recommendations:', error);
         toast({
@@ -62,6 +73,11 @@ const ArtworkRecommendations = () => {
     
     fetchAndGenerateRecommendations();
   }, [toast, isAuthenticated, currentUser]);
+
+  // Don't show the section if authenticated user has no purchases
+  if (isAuthenticated && userHasNoPurchases) {
+    return null;
+  }
 
   return (
     <section className="py-20 bg-secondary">

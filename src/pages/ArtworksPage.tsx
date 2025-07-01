@@ -21,6 +21,7 @@ const ArtworksPage = () => {
   const [showRecommendations, setShowRecommendations] = useState(false);
   const [recommendedArtworks, setRecommendedArtworks] = useState<Artwork[]>([]);
   const [isPersonalized, setIsPersonalized] = useState(false);
+  const [userHasNoPurchases, setUserHasNoPurchases] = useState(false);
   const { toast } = useToast();
   const { currentUser, isAuthenticated } = useAuth();
   
@@ -66,6 +67,7 @@ const ArtworksPage = () => {
     try {
       let recommendations: Artwork[] = [];
       let personalized = false;
+      let noPurchases = false;
       
       if (isAuthenticated && currentUser?.id) {
         console.log("Generating personalized recommendations");
@@ -74,7 +76,19 @@ const ArtworksPage = () => {
           artworks, 
           6
         );
-        personalized = true;
+        
+        if (recommendations.length === 0) {
+          console.log("User has no purchase history");
+          noPurchases = true;
+          toast({
+            title: "No Recommendations Yet",
+            description: "Make your first purchase to unlock personalized recommendations based on your preferences!",
+            variant: "default",
+          });
+          return;
+        } else {
+          personalized = true;
+        }
       } else {
         console.log("Generating general recommendations");
         // Filter by current search and price criteria for non-authenticated users
@@ -96,6 +110,7 @@ const ArtworksPage = () => {
       setRecommendedArtworks(recommendations);
       setIsPersonalized(personalized);
       setShowRecommendations(true);
+      setUserHasNoPurchases(noPurchases);
       
       toast({
         title: personalized ? "Personalized Recommendations" : "Recommendations Generated",

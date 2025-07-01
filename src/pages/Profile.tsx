@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useNavigate } from 'react-router-dom';
 import { formatPrice, formatDate } from '@/utils/formatters';
-import { CalendarIcon, MapPinIcon, UserIcon, PhoneIcon, MailIcon, Loader2, Sparkles } from 'lucide-react';
+import { CalendarIcon, MapPinIcon, UserIcon, PhoneIcon, MailIcon, Loader2, Sparkles, ShoppingCart } from 'lucide-react';
 import { authFetch, getAllArtworks } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { RecommendationEngine } from '@/services/recommendationService';
@@ -48,6 +48,7 @@ const Profile = () => {
   const [loading, setLoading] = useState(false);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
   const [generatingTicket, setGeneratingTicket] = useState<string | null>(null);
+  const [userHasNoPurchases, setUserHasNoPurchases] = useState(false);
 
   useEffect(() => {
     console.log('Profile: useEffect triggered for user:', currentUser?.id);
@@ -135,6 +136,15 @@ const Profile = () => {
         allArtworks,
         6
       );
+      
+      if (recommendations.length === 0) {
+        // Check if user has any orders to determine if they have no purchase history
+        const hasOrders = orders.length > 0;
+        setUserHasNoPurchases(!hasOrders);
+      } else {
+        setUserHasNoPurchases(false);
+      }
+      
       setRecommendedArtworks(recommendations);
     } catch (error) {
       console.error('Error loading recommendations:', error);
@@ -539,32 +549,18 @@ const Profile = () => {
               <h2 className="text-xl font-serif font-semibold">Personalized Recommendations</h2>
             </div>
             
-            <div className="mb-6 p-4 bg-gold/10 rounded-lg border border-gold/20">
-              <p className="text-sm text-gray-700">
-                These recommendations are based on your purchase history and preferences. 
-                The more you purchase, the better our recommendations become!
-              </p>
-            </div>
-            
             {loadingRecommendations ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-gold" />
                 <span className="ml-2">Loading personalized recommendations...</span>
               </div>
-            ) : recommendedArtworks.length > 0 ? (
-              <div className="artwork-grid">
-                {recommendedArtworks.map((artwork) => (
-                  <ArtworkCard key={artwork.id} artwork={artwork} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-10">
-                <Sparkles className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 mb-4">
-                  No personalized recommendations available yet.
-                </p>
-                <p className="text-sm text-gray-500 mb-6">
-                  Start by purchasing some artworks or booking exhibitions to help us understand your preferences.
+            ) : userHasNoPurchases ? (
+              <div className="text-center py-12">
+                <ShoppingCart className="h-16 w-16 text-gray-400 mx-auto mb-6" />
+                <h3 className="text-2xl font-semibold mb-4">Make Your First Purchase</h3>
+                <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                  Our recommendation system learns from your purchase history to suggest artworks you'll love. 
+                  Start by purchasing your first artwork to unlock personalized recommendations!
                 </p>
                 <div className="flex gap-4 justify-center">
                   <Button 
@@ -581,17 +577,54 @@ const Profile = () => {
                   </Button>
                 </div>
               </div>
-            )}
-            
-            {recommendedArtworks.length > 0 && (
-              <div className="mt-8 text-center">
-                <Button 
-                  variant="outline"
-                  onClick={loadPersonalizedRecommendations}
-                  disabled={loadingRecommendations}
-                >
-                  Refresh Recommendations
-                </Button>
+            ) : recommendedArtworks.length > 0 ? (
+              <>
+                <div className="mb-6 p-4 bg-gold/10 rounded-lg border border-gold/20">
+                  <p className="text-sm text-gray-700">
+                    These recommendations are based on your purchase history and preferences. 
+                    The more you purchase, the better our recommendations become!
+                  </p>
+                </div>
+                
+                <div className="artwork-grid">
+                  {recommendedArtworks.map((artwork) => (
+                    <ArtworkCard key={artwork.id} artwork={artwork} />
+                  ))}
+                </div>
+                
+                <div className="mt-8 text-center">
+                  <Button 
+                    variant="outline"
+                    onClick={loadPersonalizedRecommendations}
+                    disabled={loadingRecommendations}
+                  >
+                    Refresh Recommendations
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-10">
+                <Sparkles className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 mb-4">
+                  No personalized recommendations available yet.
+                </p>
+                <p className="text-sm text-gray-500 mb-6">
+                  Purchase some artworks to help us understand your preferences and provide better recommendations.
+                </p>
+                <div className="flex gap-4 justify-center">
+                  <Button 
+                    className="bg-gold hover:bg-gold-dark text-white"
+                    onClick={() => navigate('/artworks')}
+                  >
+                    Browse Artworks
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={() => navigate('/exhibitions')}
+                  >
+                    View Exhibitions
+                  </Button>
+                </div>
               </div>
             )}
           </TabsContent>
